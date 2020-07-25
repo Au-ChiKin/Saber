@@ -139,7 +139,7 @@ public class TestSelection {
 		IPredicate [] predicates = null;
 		
 		if (selectivity > 0 && numberOfComparisons == 0) {
-			
+
 			predicate =  
 				new IntComparisonPredicate(IntComparisonPredicate.LESS_OP, new IntColumnReference(1), new IntConstant(selectivity));
 			

@@ -96,7 +96,7 @@ ifeq (\$(OS), Darwin)
 	CFLAGS += -I\$(JAVA_HOME)/include/darwin
 else
 	CFLAGS += -I\$(JAVA_HOME)/include
-	CFLAGS += -I\$(JAVA_HOME)/linux
+	CFLAGS += -I\$(JAVA_HOME)/include/linux
 endif
 
 CFLAGS += -I/usr/include -D_GNU_SOURCE
