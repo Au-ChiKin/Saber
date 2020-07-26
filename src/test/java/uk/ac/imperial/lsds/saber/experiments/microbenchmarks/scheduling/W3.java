@@ -38,15 +38,15 @@ public class W3 {
 	
 	public static void main (String [] args) throws Exception {
 		
-		int batchSize = 1048576;
-		
+		int batchSize = 1048576; // 1024 x 1024
+
 		WindowType windowType = WindowType.ROW_BASED;
-		
+
 		int windowRange = 1;
 		int windowSlide = 1;
-		
-		int tuplesPerInsert = 16384; /* x64 = 1MB */
-		
+
+		int tuplesPerInsert = 16384; /* x64 = 1MB */ // 16 x 1024
+
 		/* Parse command line arguments */
 		int i, j;
 		for (i = 0; i < args.length; ) {
@@ -60,44 +60,44 @@ public class W3 {
 			}
 			i = j + 1;
 		}
-		
+
 		SystemConf.dump();
-		
+
 		/*
 		SystemConf.CIRCULAR_BUFFER_SIZE = 512 * 1048576;
 		SystemConf.LATENCY_ON = false;
-		
+
 		SystemConf.PARTIAL_WINDOWS = 0;
-		
+
 		SystemConf.THROUGHPUT_MONITOR_INTERVAL  = 200L;
 		SystemConf.PERFORMANCE_MONITOR_INTERVAL = 500L;
-		
+
 		SystemConf.SCHEDULING_POLICY = SchedulingPolicy.HLS;
-		
+
 		SystemConf.SWITCH_THRESHOLD = 10;
-		
+
 		SystemConf.CPU = false;
 		SystemConf.GPU = false;
 		*/
-		
+
 		/*
 		if (executionMode.toLowerCase().contains("cpu") || executionMode.toLowerCase().contains("hybrid"))
 			SystemConf.CPU = true;
-		
+
 		if (executionMode.toLowerCase().contains("gpu") || executionMode.toLowerCase().contains("hybrid"))
 			SystemConf.GPU = true;
-		
+
 		SystemConf.HYBRID = SystemConf.CPU && SystemConf.GPU;
-		
+
 		SystemConf.THREADS = numberOfThreads;
 		*/
-		
+
 		QueryConf queryConf = new QueryConf (batchSize);
-		
+
 		WindowDefinition window = new WindowDefinition (windowType, windowRange, windowSlide);
-		
+
 		int [] offsets = new int [12];
-		
+
 		offsets[ 0] =  0; /*   timestamp:  long */
 		offsets[ 1] =  8; /*       jobId:  long */
 		offsets[ 2] = 16; /*      taskId:  long */
@@ -110,9 +110,9 @@ public class W3 {
 		offsets[ 9] = 52; /*         ram: float */
 		offsets[10] = 56; /*        disk: float */
 		offsets[11] = 60; /* constraints:   int */
-		
+
 		ITupleSchema schema = new TupleSchema (offsets, 64);
-		
+
 		schema.setAttributeType ( 0, PrimitiveType.LONG );
 		schema.setAttributeType ( 1, PrimitiveType.LONG );
 		schema.setAttributeType ( 2, PrimitiveType.LONG );
@@ -125,19 +125,19 @@ public class W3 {
 		schema.setAttributeType ( 9, PrimitiveType.FLOAT);
 		schema.setAttributeType (10, PrimitiveType.FLOAT);
 		schema.setAttributeType (11, PrimitiveType.INT  );
-		
+
 		/* Load attributes of interest */
-		
+
 		int ntasks = 8812;
-		
+
 		int extraBytes = 5120 * schema.getTupleSize();
-		
-		ByteBuffer [] data = new ByteBuffer [ntasks];
+
+		ByteBuffer [] data = new ByteBuffer [ntasks]; // creates 8812 ByteBuffers
 		for (i = 0; i < ntasks; i++)
 			data[i] = ByteBuffer.allocate(schema.getTupleSize() * tuplesPerInsert);
-		
+
 		ByteBuffer buffer;
-		
+
 		for (i = 0; i < ntasks; i++) {
 			buffer = data[i];
 			buffer.clear();
@@ -156,33 +156,33 @@ public class W3 {
 				buffer.putInt   (1);
 			}
 		}
-		
+
 		String dataDir = SystemConf.SABER_HOME + "/datasets/google-cluster-data/";
-		
+
 		String [] filenames = {
 			dataDir +"norm-event-types.txt",
 			dataDir +      "categories.txt",
 			dataDir +      "priorities.txt",
 			dataDir + "cpu-utilisation.txt",
 		};
-		
+
 		boolean [] containsInts = { true, true, true, false };
-		
+
 		FileInputStream f;
 		DataInputStream d;
 		BufferedReader  b;
-		
+
 		String line = null;
 		int lines = 0;
-		
+
 		int bufferIndex, tupleIndex, attributeIndex;
-			
+
 		for (i = 0; i < 4; i++) {
 
 			lines = 0;
 
 			bufferIndex = tupleIndex = 0;
-			
+
 			buffer = data[bufferIndex];
 
 			/* Load file into memory */
@@ -204,18 +204,18 @@ public class W3 {
 				buffer = data[bufferIndex];
 
 				attributeIndex = tupleIndex * schema.getTupleSize() + 36 + (i * 4);
-				
+
 				if (containsInts[i])
 					buffer.putInt(attributeIndex, Integer.parseInt(line));
 				else
 					buffer.putFloat(attributeIndex, Float.parseFloat(line));
-				
+
 				tupleIndex ++;
 			}
 
 			b.close();
 
-			System.out.println(String.format("# %d lines last buffer position at %d has remaining ? %5s (%d bytes)", 
+			System.out.println(String.format("# %d lines last buffer position at %d has remaining ? %5s (%d bytes)",
 					lines, buffer.position(), buffer.hasRemaining(), buffer.remaining()));
 
 			/* Fill in the extra lines */
@@ -224,30 +224,33 @@ public class W3 {
 				System.arraycopy(buffer.array(), 0, buffer.array(), destPos, extraBytes);
 			}
 		}
-		
+
 		IPredicate [] andPredicates = new IPredicate [2];
-		
-		andPredicates[0] = new IntComparisonPredicate 
+
+		// AND Input.userid == 3 --> #1
+		andPredicates[0] = new IntComparisonPredicate
 				(IntComparisonPredicate.EQUAL_OP,   new IntColumnReference(5), new IntConstant(3));
-		
+
+		// Input.cpu < 0 OR Input.ram < 0 OR Input.disk < 0 for 499 times + OR Input.cpu >= 0 for 1 time -> #2
 		int comparisons = 500;
-		
+
 		IPredicate [] orPredicates = new IPredicate [comparisons];
 		int a = 8;
 		for (i = 0; i < comparisons - 1; i++) {
-			orPredicates[i] = new FloatComparisonPredicate 
+			orPredicates[i] = new FloatComparisonPredicate
 					(FloatComparisonPredicate.LESS_OP, new FloatColumnReference(a), new FloatConstant(0));
 			a ++;
 			if (a == 11) a = 8;
 		}
-		
-		orPredicates[comparisons - 1] = new FloatComparisonPredicate 
+
+		orPredicates[comparisons - 1] = new FloatComparisonPredicate
 				(FloatComparisonPredicate.NONLESS_OP, new FloatColumnReference(8), new FloatConstant(0));
-		
+
 		andPredicates[1] = new ORPredicate (orPredicates);
-		
+
+		// #1 AND #2
 		IPredicate predicate = new ANDPredicate (andPredicates);
-		
+
 		StringBuilder customPredicate = new StringBuilder ();
 		customPredicate.append("int value = 1;\n");
 		customPredicate.append("int attribute_value1 = __bswap32(p->tuple._5);\n");
@@ -262,31 +265,31 @@ public class W3 {
 		}
 		customPredicate.append(");\n");
 		customPredicate.append("return value;\n");
-		
+
 		IOperatorCode cpuCode = new Selection (predicate);
 		IOperatorCode gpuCode = new SelectionKernel (schema, predicate, customPredicate.toString(), batchSize);
-		
+
 		System.out.println(cpuCode);
-		
+
 		QueryOperator operator;
 		operator = new QueryOperator (cpuCode, gpuCode);
-		
+
 		Set<QueryOperator> operators = new HashSet<QueryOperator>();
 		operators.add(operator);
-		
+
 		long timestampReference = System.nanoTime();
-		
+
 		Query query = new Query (0, operators, schema, window, null, null, queryConf, timestampReference);
-		
+
 		Set<Query> queries = new HashSet<Query>();
 		queries.add(query);
-		
+
 		QueryApplication application = new QueryApplication(queries);
-		
+
 		application.setup();
-		
+
 		/* Push the input stream */
-		
+
 		i = 0;
 		while (true) {
 			application.processData (data[i].array());
