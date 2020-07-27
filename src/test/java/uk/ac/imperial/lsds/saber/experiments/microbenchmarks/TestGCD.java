@@ -46,6 +46,7 @@ public class TestGCD {
 
 		String executionMode = "gpu";
 		int numberOfThreads = 1;
+		int numberOfGroups = 0;
 
 		/* batch config */
 		int batchSize = 1048576;
@@ -53,7 +54,7 @@ public class TestGCD {
 		/* windows config */
 		WindowType windowType = WindowType.ROW_BASED;
 		int windowRange = 1024;
-		int windowSlide = 1024;
+		int windowSlide = 512;
 		int numberOfAttributes = 6;
 		WindowType windowType1 = WindowType.ROW_BASED;
 		int windowRange1 = 1024;
@@ -104,6 +105,9 @@ public class TestGCD {
 			if (args[i].equals("--input-attributes-of-second-query")) {
 				numberOfAttributes1 = Integer.parseInt(args[j]);
 			} else
+			if (args[i].equals("--number-of-groups")) {
+				numberOfGroups = Integer.parseInt(args[j]);
+			} else
 			if (args[i].equals("--tuples-per-insert")) {
 				tuplesPerInsert = Integer.parseInt(args[j]);
 			} else {
@@ -116,7 +120,7 @@ public class TestGCD {
 		SystemConf.CIRCULAR_BUFFER_SIZE = 256 * 1048576;
 		SystemConf.UNBOUNDED_BUFFER_SIZE = 1 * 1048576;
 
-		SystemConf.PARTIAL_WINDOWS = 128;
+		SystemConf.PARTIAL_WINDOWS = 1024 * 16;
 
 		SystemConf.LATENCY_ON = false;
 
@@ -305,14 +309,14 @@ public class TestGCD {
 
 			b.close();
 
-			// System.out.println(String.format("# %d lines last buffer position at %d has remaining ? %5s (%d bytes)", 
-			// 		lines, buffer.position(), buffer.hasRemaining(), buffer.remaining()));
+			System.out.println(String.format("# %d lines last buffer position at %d has remaining ? %5s (%d bytes)", 
+					lines, buffer.position(), buffer.hasRemaining(), buffer.remaining()));
 
-			// /* Fill in the extra lines */
-			// if (i != 0) {
-			// 	int destPos = buffer.capacity() - extraBytes;
-			// 	System.arraycopy(buffer.array(), 0, buffer.array(), destPos, extraBytes);
-			// }
+			/* Fill in the extra lines */
+			if (i != 0) {
+				int destPos = buffer.capacity() - extraBytes;
+				System.arraycopy(buffer.array(), 0, buffer.array(), destPos, extraBytes);
+			}
 		}
 
 		/* timestamp reference for latency */
@@ -329,11 +333,16 @@ public class TestGCD {
 			aggregationAttributes[i] = new FloatColumnReference(8); // sum(cpu)
 		}
 
-		// Expression [] groupByAttributes = new Expression [] {new IntColumnReference(6)}; // group by category
+		Expression [] groupByAttributes = new Expression [1]; 
+		groupByAttributes[0] = new IntColumnReference(6); // group by category
 
-		IOperatorCode cpuCode = new Aggregation (window, aggregationTypes, aggregationAttributes);
-		IOperatorCode gpuCode = new ReductionKernel (window, aggregationTypes, aggregationAttributes, schema, batchSize);
-		// new AggregationKernel (window, aggregationTypes, aggregationAttributes, schema, batchSize);
+		IOperatorCode cpuCode = new Aggregation (window, aggregationTypes, aggregationAttributes, groupByAttributes);
+		IOperatorCode gpuCode; 
+		if (numberOfGroups > 0) {
+			gpuCode = new AggregationKernel (window, aggregationTypes, aggregationAttributes, groupByAttributes, schema, batchSize);
+		} else {
+			gpuCode = new ReductionKernel (window, aggregationTypes, aggregationAttributes, schema, batchSize);
+		}
 
 		QueryOperator operator;
 		operator = new QueryOperator (cpuCode, gpuCode);
