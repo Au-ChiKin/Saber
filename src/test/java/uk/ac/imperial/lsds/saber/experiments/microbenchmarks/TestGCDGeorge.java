@@ -40,7 +40,8 @@ public class TestGCDGeorge {
 
     String executionMode = "gpu";
     int numberOfThreads = 1;
-    int batchSize = 1048576;
+	int batchSize = 1048576;
+	
     WindowType windowType1 = WindowType.ROW_BASED;
     int windowRange1 = 1024;
     int windowSlide1 = 1024;
@@ -48,7 +49,8 @@ public class TestGCDGeorge {
     WindowType windowType2 = WindowType.ROW_BASED;
     int windowRange2 = 1024;
     int windowSlide2 = 1024;
-    int numberOfAttributes2 = 6;
+	int numberOfAttributes2 = 6;
+	
     int tuplesPerInsert = 32768;
 
     /* Parse command line arguments */
