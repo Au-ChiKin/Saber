@@ -38,27 +38,31 @@ import uk.ac.imperial.lsds.saber.cql.operators.gpu.NoOpKernel;
 import uk.ac.imperial.lsds.saber.cql.operators.gpu.ProjectionKernel;
 import uk.ac.imperial.lsds.saber.cql.operators.gpu.ReductionKernel;
 
-public class TestGDB {
+public class TestGCD {
 	
 	public static final String usage = "usage: TestGDB";
 	
 	public static void main (String [] args) throws Exception {
-		
+
+		String executionMode = "gpu";
+		int numberOfThreads = 1;
+
 		/* batch config */
 		int batchSize = 1048576;
 		
 		/* windows config */
 		WindowType windowType = WindowType.ROW_BASED;
-		int windowRange = 1;
-		int windowSlide = 1;
-
-		// WindowType windowType1 = WindowType.ROW_BASED;
-		// int windowRange1 = 1024;
-		// int windowSlide1 = 1024;
+		int windowRange = 1024;
+		int windowSlide = 1024;
+		int numberOfAttributes = 6;
+		WindowType windowType1 = WindowType.ROW_BASED;
+		int windowRange1 = 1024;
+		int windowSlide1 = 1024;
+		int numberOfAttributes1 = 6;
 
 		/* buffer config */
 		int tuplesPerInsert = 16384; /* (16 x 1024) x 64 = 1MB */
-		int ntasks = 1024; // 8812;
+		int ntasks = 16; // 8812;
 		
 		/* Parse command line arguments */
 		int i, j;
@@ -67,43 +71,74 @@ public class TestGDB {
 				System.err.println(usage);
 				System.exit(1);
 			}
-			if (! SystemConf.parse(args[i], args[j])) {
+			if (args[i].equals("--mode")) {
+				executionMode = args[j];
+			} else
+			if (args[i].equals("--threads")) {
+				numberOfThreads = Integer.parseInt(args[j]);
+			} else
+			if (args[i].equals("--batch-size")) {
+				batchSize = Integer.parseInt(args[j]);
+			} else
+			if (args[i].equals("--window-type-of-first-query")) {
+				windowType = WindowType.fromString(args[j]);
+			} else
+			if (args[i].equals("--window-range-of-first-query")) {
+				windowRange = Integer.parseInt(args[j]);
+			} else
+			if (args[i].equals("--window-slide-of-first-query")) {
+				windowSlide = Integer.parseInt(args[j]);
+			} else
+			if (args[i].equals("--input-attributes-of-first-query")) {
+				numberOfAttributes = Integer.parseInt(args[j]);
+			} else
+			if (args[i].equals("--window-type-of-second-query")) {
+				windowType1 = WindowType.fromString(args[j]);
+			} else
+			if (args[i].equals("--window-range-of-second-query")) {
+				windowRange1 = Integer.parseInt(args[j]);
+			} else
+			if (args[i].equals("--window-slide-of-second-query")) {
+				windowSlide1 = Integer.parseInt(args[j]);
+			} else
+			if (args[i].equals("--input-attributes-of-second-query")) {
+				numberOfAttributes1 = Integer.parseInt(args[j]);
+			} else
+			if (args[i].equals("--tuples-per-insert")) {
+				tuplesPerInsert = Integer.parseInt(args[j]);
+			} else {
 				System.err.println(String.format("error: unknown flag %s %s", args[i], args[j]));
 				System.exit(1);
 			}
 			i = j + 1;
 		}
-		
-		SystemConf.dump();
-		
-		/*
-		SystemConf.CIRCULAR_BUFFER_SIZE = 512 * 1048576;
+
+		SystemConf.CIRCULAR_BUFFER_SIZE = 256 * 1048576;
+		SystemConf.UNBOUNDED_BUFFER_SIZE = 1 * 1048576;
+
+		SystemConf.PARTIAL_WINDOWS = 128;
+
 		SystemConf.LATENCY_ON = false;
-		
-		SystemConf.PARTIAL_WINDOWS = 0;
-		
-		SystemConf.THROUGHPUT_MONITOR_INTERVAL  = 200L;
-		SystemConf.PERFORMANCE_MONITOR_INTERVAL = 500L;
-		
-		SystemConf.SCHEDULING_POLICY = SchedulingPolicy.HLS;
-		
-		SystemConf.SWITCH_THRESHOLD = 10;
-		
+
+		SystemConf.SCHEDULING_POLICY = SystemConf.SchedulingPolicy.HLS;
+		SystemConf.SWITCH_THRESHOLD = 5;
+		SystemConf.THROUGHPUT_MONITOR_INTERVAL = 500L;
+
 		SystemConf.CPU = false;
 		SystemConf.GPU = false;
-		*/
-		
-		/*
+
 		if (executionMode.toLowerCase().contains("cpu") || executionMode.toLowerCase().contains("hybrid"))
-			SystemConf.CPU = true;
-		
+		SystemConf.CPU = true;
+
 		if (executionMode.toLowerCase().contains("gpu") || executionMode.toLowerCase().contains("hybrid"))
-			SystemConf.GPU = true;
-		
+		SystemConf.GPU = true;
+
 		SystemConf.HYBRID = SystemConf.CPU && SystemConf.GPU;
-		
+
 		SystemConf.THREADS = numberOfThreads;
-		*/
+		
+		SystemConf.dump();
+	
 		
 		/* Query init */
 		QueryConf queryConf = new QueryConf (batchSize);
@@ -270,14 +305,14 @@ public class TestGDB {
 
 			b.close();
 
-			System.out.println(String.format("# %d lines last buffer position at %d has remaining ? %5s (%d bytes)", 
-					lines, buffer.position(), buffer.hasRemaining(), buffer.remaining()));
+			// System.out.println(String.format("# %d lines last buffer position at %d has remaining ? %5s (%d bytes)", 
+			// 		lines, buffer.position(), buffer.hasRemaining(), buffer.remaining()));
 
-			/* Fill in the extra lines */
-			if (i != 0) {
-				int destPos = buffer.capacity() - extraBytes;
-				System.arraycopy(buffer.array(), 0, buffer.array(), destPos, extraBytes);
-			}
+			// /* Fill in the extra lines */
+			// if (i != 0) {
+			// 	int destPos = buffer.capacity() - extraBytes;
+			// 	System.arraycopy(buffer.array(), 0, buffer.array(), destPos, extraBytes);
+			// }
 		}
 
 		/* timestamp reference for latency */
@@ -294,10 +329,11 @@ public class TestGDB {
 			aggregationAttributes[i] = new FloatColumnReference(8); // sum(cpu)
 		}
 
-		Expression [] groupByAttributes = new Expression [] {new IntColumnReference(6)}; // group by category
+		// Expression [] groupByAttributes = new Expression [] {new IntColumnReference(6)}; // group by category
 
-		IOperatorCode cpuCode = new Aggregation (window, aggregationTypes, aggregationAttributes, groupByAttributes);
-		IOperatorCode gpuCode = new AggregationKernel (window, aggregationTypes, aggregationAttributes, groupByAttributes, schema, batchSize);
+		IOperatorCode cpuCode = new Aggregation (window, aggregationTypes, aggregationAttributes);
+		IOperatorCode gpuCode = new ReductionKernel (window, aggregationTypes, aggregationAttributes, schema, batchSize);
+		// new AggregationKernel (window, aggregationTypes, aggregationAttributes, schema, batchSize);
 
 		QueryOperator operator;
 		operator = new QueryOperator (cpuCode, gpuCode);
@@ -329,8 +365,10 @@ public class TestGDB {
 		// queries.add(query1);
 		
 		/* application setup */
+		System.err.print("Start constructing application:\n");
 		QueryApplication application = new QueryApplication(queries);
 		
+		System.err.print("Start setting up application:\n");
 		application.setup();
 		
 		/* Can only been put her */ 
@@ -341,6 +379,7 @@ public class TestGDB {
 			query.setAggregateOperator((IAggregateOperator) gpuCode);
 
 		/* Push the input stream */		
+		System.err.print("Start processing:\n");
 		i = 0;
 		while (true) {
 			application.processData (data[i].array());
